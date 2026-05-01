@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <title>Eetlekker PrintAgent</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --line:#1f2937; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; --danger:#ef4444; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin-bottom: 20px; font-size: 13px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+    label { color: var(--muted); font-size: 13px; }
+    select, input { width: 100%; padding: 8px 10px; background:#0b1220; color: var(--text); border:1px solid var(--line); border-radius:8px; font-size:14px; }
+    button { background: var(--accent); color: #052e13; border: 0; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 8px; }
+    button.secondary { background:#374151; color:#fff; }
+    .status { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:#052e13; color:#86efac; font-size:13px; }
+    .status.bad { background:#3f1212; color:#fca5a5; }
+    pre.log { background:#0b1220; border:1px solid var(--line); border-radius:8px; padding:12px; max-height:260px; overflow:auto; font-size:12px; white-space:pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Eetlekker PrintAgent</h1>
+    <div class="sub">Локальний агент друку для термопринтерів POS</div>
+
+    <div class="card">
+      <div id="status" class="status">…</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Прив'язка принтерів</h3>
+      <div class="row"><label>Чек клієнта</label><select id="r-customer"></select></div>
+      <div class="row"><label>Кухня</label><select id="r-kitchen"></select></div>
+      <div class="row"><label>Бар</label><select id="r-bar"></select></div>
+      <div class="row"><label>Кальян</label><select id="r-hookah"></select></div>
+      <div class="row"><label>Ширина паперу</label>
+        <select id="paper">
+          <option value="58">58 мм</option>
+          <option value="80">80 мм</option>
+        </select>
+      </div>
+      <div style="margin-top:10px">
+        <button id="save">Зберегти</button>
+        <button class="secondary" id="reload">Оновити список</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Тестовий друк</h3>
+      <button id="test-customer">Тест: чек клієнта</button>
+      <button id="test-kitchen" class="secondary">Тест: кухня</button>
+      <button id="test-bar" class="secondary">Тест: бар</button>
+      <button id="test-hookah" class="secondary">Тест: кальян</button>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Лог</h3>
+      <pre id="log" class="log"></pre>
+    </div>
+  </div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const log = (msg, ok = true) => {
+  const el = $("#log");
+  const t = new Date().toLocaleTimeString();
+  el.textContent = `[${t}] ${ok ? "✓" : "✗"} ${typeof msg === "string" ? msg : JSON.stringify(msg)}\n` + el.textContent;
+};
+
+let printers = [];
+let config = null;
+
+async function loadStatus() {
+  try {
+    const r = await fetch("/status").then(r => r.json());
+    $("#status").textContent = `● Підключено · ${r.app} v${r.version}`;
+    $("#status").classList.remove("bad");
+  } catch (e) {
+    $("#status").textContent = "● Не підключено";
+    $("#status").classList.add("bad");
+  }
+}
+
+async function loadAll() {
+  await loadStatus();
+  const [pr, cf] = await Promise.all([
+    fetch("/printers").then(r => r.json()),
+    fetch("/config").then(r => r.json()),
+  ]);
+  printers = pr.printers || [];
+  config = cf.config;
+  ["customer","kitchen","bar","hookah"].forEach(role => {
+    const sel = $("#r-" + role);
+    sel.innerHTML = `<option value="">— не вибрано —</option>` +
+      printers.map(p => `<option value="${p.name}" ${config.printers[role]===p.name?"selected":""}>${p.name}${p.isDefault?" (за замовч.)":""}</option>`).join("");
+  });
+  $("#paper").value = String(config.settings.paperWidth || 58);
+  log(`Завантажено ${printers.length} принтерів`);
+}
+
+$("#save").onclick = async () => {
+  const body = {
+    printers: {
+      customer: $("#r-customer").value,
+      kitchen: $("#r-kitchen").value,
+      bar: $("#r-bar").value,
+      hookah: $("#r-hookah").value,
+    },
+    settings: { ...(config?.settings || {}), paperWidth: Number($("#paper").value) },
+  };
+  const res = await fetch("/config", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json());
+  if (res.ok) { config = res.config; log("Конфіг збережено"); } else log(res.error || "Помилка", false);
+};
+
+$("#reload").onclick = loadAll;
+
+function samplePayload(role) {
+  return {
+    printerRole: role,
+    receiptType: role === "customer" ? "customer_bill" : "station_ticket",
+    restaurant: { name: "Сказка Востока", address: "вул. Троїцька 45, Одеса", phone: "+380 00 000 00 00" },
+    order: { id: "POS-TEST" + Math.floor(Math.random()*9999), tableNumber: "28", createdAt: new Date().toLocaleString("uk-UA"), status: "open" },
+    items: [
+      { name: "Сулугуні в лаваші 140гр", qty: 1, price: 125, total: 125, station: "kitchen" },
+      { name: "Сир фрі з ягідним соусом 200гр", qty: 1, price: 170, total: 170, station: "kitchen" },
+      { name: "Лимонад", qty: 2, price: 60, total: 120, station: "bar" },
+      { name: "Подвійне яблуко", qty: 1, price: 350, total: 350, station: "hookah" },
+    ],
+    totals: { subtotal: 765, discount: 0, total: 765, paid: 0, remaining: 765 },
+    payment: { status: "unpaid", method: null },
+  };
+}
+
+async function testPrint(role) {
+  try {
+    const res = await fetch("/print", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(samplePayload(role)) }).then(r => r.json());
+    if (res.ok) log(`Друк OK → ${res.printerName}`); else log(res.error || "Помилка друку", false);
+  } catch (e) { log(e.message, false); }
+}
+$("#test-customer").onclick = () => testPrint("customer");
+$("#test-kitchen").onclick  = () => testPrint("kitchen");
+$("#test-bar").onclick      = () => testPrint("bar");
+$("#test-hookah").onclick   = () => testPrint("hookah");
+
+loadAll();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>

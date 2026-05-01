@@ -1,0 +1,13 @@
+{
+  "printers": {
+    "customer": "",
+    "kitchen": "",
+    "bar": "",
+    "hookah": ""
+  },
+  "settings": {
+    "port": 7777,
+    "paperWidth": 58,
+    "autoStart": true
+  }
+}

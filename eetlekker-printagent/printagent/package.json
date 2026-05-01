@@ -1,0 +1,30 @@
+{
+  "name": "eetlekker-printagent",
+  "version": "1.0.0",
+  "description": "Local silent print agent for Eetlekker POS (Windows thermal receipt printers)",
+  "main": "src/server.js",
+  "bin": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "build:win": "pkg . --targets node18-win-x64 --output dist/EetlekkerPrintAgent.exe"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "fonts/**/*"
+    ],
+    "targets": ["node18-win-x64"],
+    "outputPath": "dist"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pdf-to-printer": "^5.6.0",
+    "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "license": "MIT"
+}
